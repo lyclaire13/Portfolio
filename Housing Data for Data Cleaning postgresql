@@ -1,0 +1,136 @@
+SELECT * FROM housing;
+
+--standardise date format
+SELECT saledate, TO_DATE(saledate, 'Month DD, YYYY') convertedsaledate FROM housing;
+
+UPDATE housing
+SET saledate = TO_DATE(saledate, 'Month DD, YYYY');
+
+ALTER TABLE housing
+ALTER COLUMN saledate TYPE DATE USING saledate::date;
+
+--populate property address data
+SELECT *
+FROM housing
+WHERE propertyaddress is null
+--order by parcelid;
+
+SELECT a.parcelid, 
+       a.propertyaddress, 
+	   b.parcelid,
+	   b.propertyaddress,
+	   CASE WHEN b.propertyaddress IS NULL 
+	   		THEN a.propertyaddress 
+	   		ELSE b.propertyaddress
+		END
+FROM housing a
+JOIN housing b
+	ON a.parcelid = b.parcelid
+	AND a.id <> b.id
+WHERE a.propertyaddress IS NULL;
+
+UPDATE housing
+SET propertyaddress = CASE WHEN b.propertyaddress IS NULL THEN a.propertyaddress ELSE b.propertyaddress END
+FROM housing a
+JOIN housing b
+	ON a.parcelid = b.parcelid
+	AND a.id <> b.id
+WHERE a.propertyaddress IS NULL;
+
+--break out address into individual columns (address, city, state)
+SELECT propertyaddress
+FROM housing;
+
+ALTER TABLE housing
+ALTER COLUMN propertyaddress TYPE varchar(255);
+
+SELECT SUBSTRING(propertyaddress, 1, POSITION(',' in propertyaddress) -1) AS address, 
+		SUBSTRING(propertyaddress, POSITION(',' in propertyaddress)+1, LENGTH(propertyaddress)) AS address
+FROM housing; 
+
+ALTER TABLE housing
+ADD propertysplitaddress varchar(255);
+
+UPDATE housing
+SET propertysplitaddress = SUBSTRING(propertyaddress, 1, POSITION(',' in propertyaddress) -1);
+
+ALTER TABLE housing
+ADD propertysplitcity varchar(255);
+
+UPDATE housing
+SET propertysplitcity = SUBSTRING(propertyaddress, POSITION(',' in propertyaddress)+1, LENGTH(propertyaddress));
+
+SELECT owneraddress
+FROM housing;
+
+SELECT split_part(owneraddress, ', ', 1),
+split_part(owneraddress, ', ', 2),
+split_part(owneraddress, ', ', 3)
+FROM housing;
+
+ALTER TABLE housing
+ADD ownersplitaddress varchar(255);
+
+UPDATE housing
+SET ownersplitaddress = split_part(owneraddress, ', ', 1)
+
+ALTER TABLE housing
+ADD ownersplitcity varchar(255);
+
+UPDATE housing
+SET ownersplitcity = split_part(owneraddress, ', ', 2)
+
+ALTER TABLE housing
+ADD ownersplitstate varchar(255);
+
+UPDATE housing
+SET ownersplitstate = split_part(owneraddress, ', ', 3)
+
+--Change Y and N to Yes and No in "Sold as Vacant"
+SELECT DISTINCT(soldasvacant), COUNT(soldasvacant) a
+FROM housing
+GROUP BY soldasvacant
+ORDER BY a;
+
+SELECT soldasvacant,
+	CASE WHEN soldasvacant = 'Y' THEN 'Yes'
+		WHEN soldasvacant = 'N' THEN 'No'
+		ELSE soldasvacant
+		END
+FROM housing;
+
+UPDATE housing
+SET soldasvacant = CASE WHEN soldasvacant = 'Y' THEN 'Yes'
+		WHEN soldasvacant = 'N' THEN 'No'
+		ELSE soldasvacant
+		END;
+		
+--remove duplicates
+WITH rownumCTE AS(
+SELECT *,
+		ROW_NUMBER() OVER(
+		PARTITION BY parcelid,
+								propertyaddress,
+								saleprice,
+								legalreference
+								ORDER BY id
+										) row_num
+FROM housing
+ORDER BY id
+)
+
+SELECT *
+FROM rownumCTE
+WHERE row_num > 1
+ORDER BY propertyaddress;
+
+DELETE FROM housing
+WHERE EXISTS
+	(SELECT *
+FROM rownumCTE
+WHERE row_num > 1
+ORDER BY propertyaddress);
+
+
+
+
