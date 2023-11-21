@@ -1,0 +1,263 @@
+#### This is a work project done to extrapolate future procurement opportunities for business development team. The code can be easily replicated and is applicable to be reused for extracting insights from any form of texts with a set of key phrases. I manually identified the positive and negative results then use it to test the accuracy of the model and went through 4 rounds of adjustment to get to 0.71 F1 score.  Below is the breakdown of metrics. 
+
+Round 4
+Accuracy	97.67%
+Error Rate	2.33%
+Recall	67.06%
+Precision	75.00%
+F1-Score	0.71
+
+
+import pandas as pd
+import re
+import spacy
+import ast
+
+# Load the spaCy model
+nlp = spacy.load('en_core_web_sm')
+
+# Read the Excel file
+input_file = 'emails.xlsx'
+df = pd.read_excel(input_file)
+
+# Specify the keyword for splitting
+keyword = "From:"
+
+# Create lists to store the new data
+new_rows = []
+new_ids = []
+
+# Iterate through the DataFrame and split the text
+for index, row in df.iterrows():
+    unique_id = row['id']
+    text = row['text']
+    substrings = text.split(keyword)
+    for substring in substrings:
+        new_rows.append({'id': unique_id, 'text': substring.strip()})
+        new_ids.append(unique_id)
+
+# Create a new DataFrame from the new data
+new_data = {'id': new_ids, 'text': [row['text'] for row in new_rows]}
+df2 = pd.DataFrame(new_data)
+
+#### clean text
+# function to preprocess email text
+def clean(text):
+    
+    # removing new line characters
+    text = re.sub('\n ',' ',str(text))
+    # removing apostrophes
+    text = re.sub("'s",'',str(text))
+    # removing hyphens
+    text = re.sub("-",' ',str(text))
+    text = re.sub("— ",' ',str(text))
+    # removing quotation marks
+    text = re.sub('\"',' ',str(text))
+    # removing salutations
+    text = re.sub("Mr\.",'Mr',str(text))
+    text = re.sub("Mrs\.",'Mrs',str(text))
+    # removing any reference to outside text
+    text = re.sub("[\(\[].*?[\)\]]", " ", str(text))
+    # removing new line characters
+    text = re.sub('  ',' ',str(text))
+    # removing non ascii characters
+    text = re.sub(r'[^\x00-\x7F]', ' ', str(text))
+    
+    return text
+
+# Preprocessing email text and replacing NaN with empty string
+df2['text_clean'] = df2['text'].apply(clean).fillna('')
+
+# Save the new DataFrame to an Excel file
+output_file = '2.cleanedsplittedtext1.csv'
+df2.to_csv(output_file, index=False)
+
+
+###identify sentences with keywords
+
+keyword_patterns = [
+    r"looks for ",
+    r"look for ",
+    r"looking to contract",
+    r"contract set up",
+    r"contract for",
+    r"contracts set up",
+    r"contracts for",
+    r"contracts with",
+    r"contracts to",
+    r"agreement for",
+    r"agreements for",
+    r"agreements to",
+    r"agreement to",
+    r"leverageable agreement",
+    r"company currently does not have",
+    r"company does not currently have",
+    r"company does not have",
+    r"company unfortunately does not have",
+    r"company does not unfortunately have",
+    r"reseller for",
+    r"reseller of",
+    r"resellers for",
+    r"resellers",
+    r"resellers of",
+    r"not able to offer",
+    r"not carry",
+    r"not offer",
+    r"doesn't cover",
+    r"does not cover",
+    r"don't cover",
+    r"do not cover",
+    r"not identify",
+    r"We don t have an agreement",
+    r"doesn t cover",
+    r"didn t see any",
+    r"expertise for",
+    r"unable to provide",
+    r"arrangements for",
+    r"arrangement for",
+]
+
+# Define a list of excluded keywords
+excluded_keywords = [
+    r"master agreement",
+    r"master agreements",
+    r" MA ",
+    r"pricing list",
+    r"price list",
+    r"price lists",
+    r"pricing", 
+    r"price refresh", 
+    r"price refreshes", 
+    r"(?:Client|Customer)\s*Supplier\s*Agreement",  # Matches "Client Supplier Agreement" or "Customer Supplier Agreement" with optional spaces
+    r"(?:client|customer)\s*supplier\s*agreement",  # Matches "Client Supplier Agreement" or "Customer Supplier Agreement" with optional spaces
+    r"CSA",
+    r"you are looking for ",
+    r"you're looking for ", 
+    r"you looking for",
+    r"agreenent extension",
+    r"extend the agreement",
+    r"extension",
+    r"expire", 
+    r"RFP appendix",
+    r"executed agreement",
+    r"Non Disclosure Agreement",
+    r"non disclosure agreement",
+    r"NDA",    
+    r"amend", 
+    r"amendment",
+    r"amendments", 
+    r"extend", 
+    r"terms and conditions",
+    r"Terms and Conditions",
+    r"updated agreement",
+    r"Appendix",
+    r"expiration date", 
+    r"second stage",
+    r"shortlist",
+    r"shortlists",
+    r"shortlisted",
+    r"better agreement",    
+    r"suitable agreement", 
+    r"best agreement",
+    r"webinar", 
+    r"sourcing team", 
+    r"able to provide",
+    r"able to offer",
+    r"find the vendors",
+    r"finds the vendor",
+    r"finds the vendor", 
+    r"find the vendors",
+    r"status update",
+    r"updated list",
+    r"contract management",
+    r"offered by",     
+]
+
+# Create a regular expression pattern that matches any of the keyword patterns
+keyword_pattern = fr'\b({"|".join(keyword_patterns)})\b'
+# Create a regular expression pattern that matches any of the excluded keywords
+excluded_pattern = fr'\b(?:{"|".join(excluded_keywords)})\b'
+
+# Define a function to convert non-string data to string
+def convert_to_string(text):
+    if pd.notna(text):
+        return str(text)
+    return ""
+
+# Define a function to find phrases that match keyword patterns and excluded keywords
+def extract_keywords(text):
+    if pd.notna(text):  # Check for non-NaN values
+        doc = nlp(text)
+    
+        # Find phrases that match keyword patterns
+        keyword_matches = re.findall(keyword_pattern, text, flags=re.IGNORECASE)
+    
+        # Find phrases that match excluded keywords
+        excluded_keyword_matches = re.findall(excluded_pattern, text, flags=re.IGNORECASE)
+    
+        return {
+            'keyword_patterns': keyword_matches,
+            'excluded_keywords': excluded_keyword_matches
+        }
+    else:
+        return {
+            'keyword_patterns': [],
+            'excluded_keywords': []
+        }
+
+# Read your original DataFrame
+input_file = '2.cleanedsplittedtext1.csv'
+df2 = pd.read_csv(input_file)
+
+# Apply the custom function to the 'text_clean' column and convert the result to a DataFrame
+result_df = df2['text_clean'].apply(extract_keywords).apply(pd.Series)
+
+# Combine the original DataFrame (df2) with the result DataFrame
+df2 = pd.concat([df2, result_df], axis=1)
+
+# Save the updated DataFrame to a new Excel file
+output_file = '3.keywordsentenceoutput.csv'
+df2.to_csv(output_file, index=False)
+
+# Read your original DataFrame
+input_file = '3.keywordsentenceoutput.csv'
+df3 = pd.read_csv(input_file)
+
+# Define a function to safely extract `keyword_patterns` as a list
+def extract_keyword_patterns(row):
+    try:
+        keywords = ast.literal_eval(row['keyword_patterns'])
+        return keywords if isinstance(keywords, list) else []
+    except (ValueError, SyntaxError):
+        return []
+
+# Apply the extract_keyword_patterns function to each row and create a new column 'keywords'
+df3['keywords'] = df3.apply(extract_keyword_patterns, axis=1)
+
+# Define a function to extract sentences based on conditions
+def extract_sentences(row):
+    if row['keywords'] and row['excluded_keywords'] == '[]':
+        # Tokenize the text using spaCy
+        doc = nlp(row['text_clean'])
+        
+        # Initialize an empty list to store matching sentences
+        matching_sentences = []
+
+        for sentence in doc.sents:
+            for keyword in row['keywords']:
+                if keyword.strip() in sentence.text:
+                    matching_sentences.append(sentence.text)
+                    break  # Break to avoid appending the same sentence multiple times
+
+        # Return the matching sentences
+        return matching_sentences if matching_sentences else None
+    else:
+        # Return an empty value when the conditions are not met
+        return None
+
+# Apply the extract_sentences function to each row and create a new column 'extracted_sentence'
+df3['extracted_sentence'] = df3.apply(extract_sentences, axis=1)
+
+# Save the updated DataFrame to a new CSV file
+output_file = '3.keywordsentenceoutput.csv'
+df3.to_csv(output_file, index=False)
